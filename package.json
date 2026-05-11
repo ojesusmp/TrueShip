@@ -1,0 +1,59 @@
+{
+  "name": "@ojesusmp/trueship",
+  "version": "1.0.0",
+  "description": "Claude Code skill that audits, standardizes, commits, tags, pushes, and publishes a repository to GitHub and npm in a single assistant turn. Knows the real-world failure modes - auto-mode classifier, npm OTP, content filtering, Windows CRLF - and surfaces clean workarounds.",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "claude-skill",
+    "skill",
+    "release",
+    "publish",
+    "git",
+    "npm",
+    "ship",
+    "trueship",
+    "truepointagents"
+  ],
+  "homepage": "https://github.com/ojesusmp/TrueShip#readme",
+  "bugs": {
+    "url": "https://github.com/ojesusmp/TrueShip/issues"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Orlando Molina",
+    "url": "https://github.com/ojesusmp"
+  },
+  "contributors": [
+    {
+      "name": "TruePointAgents",
+      "url": "https://github.com/ojesusmp"
+    }
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ojesusmp/TrueShip.git"
+  },
+  "type": "module",
+  "files": [
+    "SKILL.md",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "templates/",
+    "bin/install.mjs"
+  ],
+  "bin": {
+    "trueship-install": "bin/install.mjs"
+  },
+  "scripts": {
+    "postinstall": "node bin/install.mjs",
+    "test": "node bin/install.mjs --dry-run"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

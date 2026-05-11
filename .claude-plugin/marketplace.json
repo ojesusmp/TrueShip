@@ -1,0 +1,29 @@
+{
+  "name": "trueship",
+  "owner": {
+    "name": "Orlando Molina",
+    "email": "ojesusmp@gmail.com",
+    "url": "https://github.com/ojesusmp"
+  },
+  "metadata": {
+    "description": "TruePointAgents marketplace hosting the trueship Claude Code skill.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "trueship",
+      "source": ".",
+      "description": "End-to-end ship pipeline for a code repository: audits the working directory for missing standard documentation, scrubs credit attribution, simplifies install instructions to npm + git + Claude marketplace, commits, tags, pushes, and publishes to npm. Encodes the real-world traps (auto-mode classifier, npm OTP, content filter, CRLF) as first-class workarounds.",
+      "version": "1.0.0",
+      "category": "release-automation",
+      "tags": ["release", "publish", "git", "npm", "ship", "marketplace", "standards"],
+      "license": "MIT",
+      "homepage": "https://github.com/ojesusmp/TrueShip",
+      "repository": "https://github.com/ojesusmp/TrueShip",
+      "author": {
+        "name": "Orlando Molina",
+        "url": "https://github.com/ojesusmp"
+      }
+    }
+  ]
+}

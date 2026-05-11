@@ -1,0 +1,10 @@
+node_modules/
+.omc/
+.journal/
+.claude/
+.DS_Store
+*.log
+npm-debug.log*
+.env
+.env.*
+*.tgz

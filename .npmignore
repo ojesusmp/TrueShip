@@ -1,0 +1,12 @@
+.github/
+.claude-plugin/
+.omc/
+.journal/
+.claude/
+.gitignore
+CODE_OF_CONDUCT.md
+CONTRIBUTING.md
+SECURITY.md
+*.tgz
+.env
+.env.*

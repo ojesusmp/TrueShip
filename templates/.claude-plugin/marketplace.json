@@ -1,0 +1,29 @@
+{
+  "name": "{{REPO_SLUG}}",
+  "owner": {
+    "name": "{{CREDIT_NAME}}",
+    "email": "{{CREDIT_EMAIL}}",
+    "url": "https://github.com/{{OWNER}}"
+  },
+  "metadata": {
+    "description": "{{CREDIT_BRAND}} marketplace hosting the {{REPO_SLUG}} Claude Code skill.",
+    "version": "{{VERSION}}"
+  },
+  "plugins": [
+    {
+      "name": "{{REPO_SLUG}}",
+      "source": ".",
+      "description": "TODO: one-line description of what {{REPO_SLUG}} does.",
+      "version": "{{VERSION}}",
+      "category": "uncategorized",
+      "tags": [],
+      "license": "MIT",
+      "homepage": "https://github.com/{{OWNER}}/{{REPO_NAME}}",
+      "repository": "https://github.com/{{OWNER}}/{{REPO_NAME}}",
+      "author": {
+        "name": "{{CREDIT_NAME}}",
+        "url": "https://github.com/{{OWNER}}"
+      }
+    }
+  ]
+}
