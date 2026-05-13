@@ -18,8 +18,8 @@ This Code of Conduct applies within all project spaces — issues, pull requests
 
 Reports of unacceptable behavior may be submitted privately to the project maintainer:
 
-- **Email:** ojesusmp@gmail.com
-- **GitHub:** open a private vulnerability report via the repository "Security" tab if email is not available.
+- **GitHub Issues:** https://github.com/ojesusmp/TrueShip/issues (use issue template; mark sensitive reports private via the "Security" tab).
+- **GitHub Security tab:** open a private vulnerability report for security-sensitive concerns.
 
 All complaints will be reviewed and investigated promptly and fairly. The maintainer is obligated to respect the privacy and security of the reporter.
 
