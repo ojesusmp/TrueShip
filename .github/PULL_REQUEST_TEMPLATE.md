@@ -9,7 +9,7 @@ A one or two sentence description of what this pull request changes and why.
 - [ ] Documentation update
 - [ ] Template change (`templates/`)
 - [ ] Skill behavior change (`SKILL.md`)
-- [ ] Install script change (`bin/install.mjs`)
+- [ ] Install script change (`install.cjs`)
 - [ ] Trap encoding (new known failure handled)
 - [ ] Other (please describe)
 
@@ -21,9 +21,9 @@ Closes #(issue number) — or "N/A" if no issue was filed.
 
 Confirm that the relevant checks from `CONTRIBUTING.md` were run. Tick all that apply:
 
-- [ ] `SKILL.md` changes: file under ~400 lines, YAML frontmatter has no tabs, description contains all five auto-fire trigger phrases verbatim, seven pipeline stages still numbered consecutively.
+- [ ] `SKILL.md` changes: YAML frontmatter has no tabs, description contains all five auto-fire trigger phrases verbatim, pipeline stages (0, 1, 1.5, 2, 3, 4, 4.5, 5, 5.5, 6, 7, 8, 9, 10) all present.
 - [ ] `templates/` changes: any new tokens use `{{TOKEN_NAME}}` syntax, any new template files listed in the README.
-- [ ] `bin/install.mjs` changes: ran `node bin/install.mjs --dry-run` and `npm pack --dry-run`; both produced expected output.
+- [ ] `install.cjs` changes: ran `node install.cjs --dry-run --force` and `npm pack --dry-run`; both produced expected output; SHA-verify path returns non-zero on mismatch.
 - [ ] Updated `CHANGELOG.md` under `## [Unreleased]` describing the change.
 
 ## Compatibility with project goals

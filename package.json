@@ -1,6 +1,6 @@
 {
   "name": "@ojesusmp/trueship",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Claude Code skill that audits, standardizes, commits, tags, pushes, and publishes a repository to GitHub and npm in a single assistant turn. Knows the real-world failure modes - auto-mode classifier, npm OTP, content filtering, Windows CRLF - and surfaces clean workarounds.",
   "keywords": [
     "claude",
@@ -34,21 +34,17 @@
     "type": "git",
     "url": "git+https://github.com/ojesusmp/TrueShip.git"
   },
-  "type": "module",
   "files": [
     "SKILL.md",
     "README.md",
     "LICENSE",
     "CHANGELOG.md",
     "templates/",
-    "bin/install.mjs"
+    "install.cjs"
   ],
-  "bin": {
-    "trueship-install": "bin/install.mjs"
-  },
   "scripts": {
-    "postinstall": "node bin/install.mjs",
-    "test": "node bin/install.mjs --dry-run"
+    "postinstall": "node install.cjs",
+    "test": "node install.cjs --dry-run"
   },
   "engines": {
     "node": ">=18"

@@ -22,21 +22,9 @@ TrueShip rolls the whole release dance into one trigger phrase. It also encodes 
 
 ## Install
 
-Pick one. All three install the skill into your Claude Code skills directory automatically — no file copying, no path tweaking.
+Three discrete paths. Pick one.
 
-### 1. npm (recommended)
-
-```bash
-npm install -g @ojesusmp/trueship
-```
-
-### 2. Git (latest unreleased code)
-
-```bash
-npm install -g github:ojesusmp/TrueShip
-```
-
-### 3. Claude Code plugin marketplace
+### 1. Claude Code plugin marketplace
 
 Inside Claude Code:
 
@@ -45,9 +33,63 @@ Inside Claude Code:
 /plugin install trueship@trueship
 ```
 
-### Verify
+**Verify:** open a fresh Claude Code conversation and type `trueship`. The skill audits the current working directory and reports what it would change.
 
-In a fresh Claude Code conversation, type `trueship`. The skill should audit the current working directory and report what it would change.
+### 2. Git clone (manual)
+
+> Git does not run install scripts — the copy step is manual.
+
+```bash
+git clone https://github.com/ojesusmp/TrueShip.git
+```
+
+POSIX:
+
+```bash
+mkdir -p ~/.claude/skills/trueship
+cp TrueShip/SKILL.md ~/.claude/skills/trueship/SKILL.md
+```
+
+Windows PowerShell:
+
+```powershell
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.claude\skills\trueship" | Out-Null
+Copy-Item "TrueShip\SKILL.md" "$env:USERPROFILE\.claude\skills\trueship\SKILL.md"
+```
+
+**Verify:**
+
+```bash
+sha256sum ~/.claude/skills/trueship/SKILL.md
+```
+
+```powershell
+(Get-FileHash "$env:USERPROFILE\.claude\skills\trueship\SKILL.md" -Algorithm SHA256).Hash
+```
+
+### 3. npm (postinstall auto-copies SKILL.md)
+
+```bash
+npm install -g @ojesusmp/trueship
+```
+
+Latest unreleased from GitHub:
+
+```bash
+npm install -g github:ojesusmp/TrueShip
+```
+
+**Verify:** the postinstall log prints `[trueship install] copied (sha256=…)`. Re-check independently:
+
+```bash
+sha256sum ~/.claude/skills/trueship/SKILL.md
+```
+
+```powershell
+(Get-FileHash "$env:USERPROFILE\.claude\skills\trueship\SKILL.md" -Algorithm SHA256).Hash
+```
+
+> **Windows quirk:** `npm install -g github:ojesusmp/TrueShip` on Windows + Node 24 + npm 11 may print `MODULE_NOT_FOUND` and exit 1 even though the postinstall copied SKILL.md successfully. Verify with the SHA above. For a clean exit, use `npm pack github:ojesusmp/TrueShip` then `npm install -g <generated>.tgz`.
 
 ---
 
@@ -121,6 +163,8 @@ If any of these files are missing from the working directory, TrueShip writes th
 | `.github/ISSUE_TEMPLATE/feature_request.md` | `templates/.github/ISSUE_TEMPLATE/feature_request.md` |
 | `.github/PULL_REQUEST_TEMPLATE.md` | `templates/.github/PULL_REQUEST_TEMPLATE.md` |
 | `.claude-plugin/marketplace.json` | `templates/.claude-plugin/marketplace.json` (only if a `SKILL.md` exists at repo root) |
+| `.namecheck.txt` | `templates/.namecheck.txt` (seed-only — canonical placeholder patterns for the Stage 0 name audit) |
+| `.gitignore` | `templates/.gitignore` (seed-only — Stage 9 minimum patterns; merged in-place, never removes existing entries) |
 
 If a target file already exists, TrueShip preserves the existing content and only patches specific lines — credit strings in `LICENSE`, author fields in `package.json`, and the install section of `README.md`.
 
@@ -134,7 +178,8 @@ If a target file already exists, TrueShip preserves the existing content and onl
 | npm requires OTP | Reads the auth URL from npm's error output; tells the user to open it and re-run `! npm publish`. |
 | Content filter blocks long inline assistant prose | Writes all file content via the Write tool, never as multi-paragraph assistant messages. |
 | Windows CRLF warnings on `git add` | Suppresses them in reporting; they are harmless `core.autocrlf` warnings. |
-| Postinstall recursion when running from source repo | The shipped `bin/install.mjs` exits early when a `.git/` directory is present in the package root. |
+| Postinstall recursion when running from source repo | The shipped `install.cjs` exits early when a `.git/` directory is present in the package root; bypass with `--force`. |
+| Windows + Node 24 + npm 11 `MODULE_NOT_FOUND` exit 1 on `github:` install | Cosmetic — the postinstall completed. Verify with the printed SHA-256, or use `npm pack` + local tarball for a clean exit. |
 | `gh repo create` requires auth | Surfaces `! gh auth login` if `gh auth status` fails. |
 
 ---

@@ -33,18 +33,19 @@ Before contributing, make sure your change aligns with these non-negotiable goal
 
 For changes that touch `SKILL.md`:
 
-- Confirm the file is under ~400 lines.
 - Confirm the YAML frontmatter has no tabs and the `description` field still contains exactly the five auto-fire trigger phrases verbatim.
-- Confirm the seven pipeline stages are still numbered consecutively and each stage has a name + body.
+- Confirm all pipeline stages (0, 1, 1.5, 2, 3, 4, 4.5, 5, 5.5, 6, 7, 8, 9, 10) are still present and each has a name + body.
+- Run the Stage 0 self-audit: `git grep -iEf .namecheck.txt -- ':!.namecheck.txt' ':!templates/.namecheck.txt'` returns zero hits.
 
 For changes that touch `templates/`:
 
 - Open each modified template and confirm any new tokens use the `{{TOKEN_NAME}}` syntax.
 - Confirm any new template files are listed in the README "What TrueShip writes" table.
 
-For changes that touch `bin/install.mjs`:
+For changes that touch `install.cjs`:
 
-- Run `node bin/install.mjs --dry-run` from the package root and confirm it lists every file in the `files` array from `package.json`.
+- Run `node install.cjs --dry-run --force` from the package root and confirm it lists every file in the `files` array from `package.json`.
+- Run `node install.cjs --force` once and confirm the printed source/destination SHA-256 values match the source files.
 - Run `npm pack --dry-run` and confirm the tarball contents match expectations.
 
 ## Coding conventions

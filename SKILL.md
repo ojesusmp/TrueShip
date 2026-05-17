@@ -1,163 +1,243 @@
 ---
 name: trueship
-description: "End-to-end ship pipeline for a code repository: audits the working directory for missing standard documentation (README, LICENSE, CHANGELOG, CODE_OF_CONDUCT, CONTRIBUTING, SECURITY, .github/ templates, .claude-plugin/marketplace.json for Claude Code skills), patches credit attribution, simplifies install instructions to npm + git + Claude marketplace, then commits, tags, pushes, and publishes to npm. Knows the real-world traps: auto-mode classifier blocking direct pushes to main, npm OTP requiring browser, content-filter trips on long inline prose, CRLF noise on Windows, postinstall recursion when the package contains a .git directory. Trigger phrases - 'trueship', '/trueship', 'ship this repo', 'prepare repo for release', 'publish skill to github and npm'."
+description: "End-to-end ship pipeline for a code repository: audits the working directory for missing standard documentation (README, LICENSE, CHANGELOG, CODE_OF_CONDUCT, CONTRIBUTING, SECURITY, .github/ templates, .claude-plugin/marketplace.json for Claude Code skills), runs pre-tag privacy and identity audits (name leaks, absolute paths, maintainer tokens) and — when the maintainer confirms the product is finished — scrubs local paths, third-party names, addresses, and identity tokens while keeping the credit and optionally the email, enforces installer-location and CommonJS conventions, patches credit attribution, simplifies install instructions to three discrete paths (marketplace + git clone + npm) each with a Verify step, then commits via -F file flag, tags, pushes, and publishes to npm. Knows the real-world traps: auto-mode classifier blocking direct pushes to main, npm OTP requiring browser, content-filter trips on long inline prose, CRLF noise on Windows, PowerShell here-string mangling git/gh argv, postinstall MODULE_NOT_FOUND cosmetic exit-1 on Windows + Node 24 + npm 11, postinstall recursion when the package contains a .git directory. Trigger phrases - 'trueship', '/trueship', 'ship this repo', 'prepare repo for release', 'publish skill to github and npm'."
 license: MIT
-argument-hint: "[--version <semver>] [--credit-name <name>] [--credit-brand <brand>] [--no-publish] [--no-push]"
+argument-hint: "[--version <semver>] [--credit-name <name>] [--credit-brand <brand>] [--release-type code|docs|metadata] [--no-publish] [--no-push]"
 ---
 
 # TrueShip
 
-Take any working repository — from a fresh skill folder to an existing project — and put it on GitHub + npm + the Claude Code plugin marketplace in one assistant turn. Standardized docs, scrubbed credits, simple install instructions, real-world failure modes pre-handled.
+Take any working repository — from a fresh skill folder to an existing project — and put it on GitHub + npm + the Claude Code plugin marketplace in one assistant turn. Standardized docs, scrubbed credits, three simple install paths each verified by SHA, real-world failure modes pre-handled.
+
+## Mantra
+
+> **Ship the deploy. Document the quirk. Verify the hash. Scrub the names. Use the file flag.**
+
+Each clause is enforced by a stage below.
 
 ## When to invoke
 
-TrueShip auto-fires when the user types any of:
+Auto-fires on: `trueship`, `/trueship`, `ship this repo`, `prepare repo for release`, `publish skill to github and npm`.
 
-- `trueship`
-- `/trueship`
-- `ship this repo`
-- `prepare repo for release`
-- `publish skill to github and npm`
-
-## Claude may also suggest invoking when user says...
-
-These phrases prompt Claude to offer TrueShip but not auto-fire:
-
-- `release time`
-- `ready to ship`
-- `is this ready to publish`
-
-On those, Claude proposes: "Want me to run `trueship` to prepare and publish this repo?" and waits for confirmation.
-
-## What it does
-
-TrueShip runs a seven-stage pipeline against the current working directory:
-
-1. **Audit** — inspect the repo for missing standard documentation, default credit strings, and install instructions that contain manual copy-paste steps.
-2. **Patch docs** — write or update `README.md`, `LICENSE`, `CHANGELOG.md`, `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`, `SECURITY.md`, `.github/ISSUE_TEMPLATE/bug_report.md`, `.github/ISSUE_TEMPLATE/feature_request.md`, `.github/PULL_REQUEST_TEMPLATE.md`, and `.claude-plugin/marketplace.json` (if a Claude Code skill is detected).
-3. **Scrub credits** — replace any default author strings in `LICENSE` and `package.json` with the configured `--credit-name` (default `Orlando Molina`) and `--credit-brand` (default `TruePointAgents`).
-4. **Simplify install** — rewrite the README install section down to three paths: npm, git, Claude Code marketplace. Remove any manual copy instructions.
-5. **Commit** — stage every changed and new file, write a conventional commit message naming the version bump, and create the commit. Never `--no-verify`. Never `--amend` without explicit user OK.
-6. **Tag + push** — create an annotated `v<semver>` tag, push the tag to origin (always works), then attempt `git push origin main`. If the push is blocked by the Claude Code auto-mode classifier, surface the `!` prefix workaround to the user.
-7. **Publish + verify** — if `package.json` exists and `--no-publish` was not passed, run `npm publish`. If npm requires an OTP, instruct the user to authenticate in the browser. Verify each remote artifact landed: tag visible via `git ls-remote --tags`, `gh release view` if `gh` is on PATH, `npm view <pkg> version` matches.
+Soft-prompts on: `release time`, `ready to ship`, `is this ready to publish` — proposes "Want me to run `trueship`?" and waits for confirmation.
 
 ## Inputs
 
-TrueShip takes its inputs in this order of precedence:
+Order of precedence:
 
-1. **Command-line flags** — `--version 1.2.3`, `--credit-name "Jane Doe"`, `--credit-brand "Acme Co"`, `--no-publish`, `--no-push`.
-2. **Conversation context** — recent assistant turns and user messages.
-3. **Files** — `package.json` `version` field, existing `CHANGELOG.md` `## [Unreleased]` entries, `.omc/state/`, `.journal/STATE.md`.
-4. **Defaults** — credit name `Orlando Molina`, credit brand `TruePointAgents`, version bump = patch (`1.0.0 -> 1.0.1`).
+1. **CLI flags** — `--version 1.2.3`, `--credit-name "Jane Doe"`, `--credit-brand "Acme Co"`, `--release-type code|docs|metadata`, `--no-publish`, `--no-push`.
+2. **Conversation context** — recent turns.
+3. **Files** — `package.json` `version`, `CHANGELOG.md` `## [Unreleased]`, `.omc/state/`, `.journal/STATE.md`.
+4. **Defaults** — credit name `Orlando Molina`, credit brand `TruePointAgents`, version bump = patch, release-type = code.
 
-If a required value cannot be auto-extracted, TrueShip asks one consolidated question listing every missing field with sensible defaults pre-filled.
+If a required value is missing, ask ONE consolidated question with sensible defaults.
+
+---
 
 ## Pipeline
 
-### Stage 1 — Audit
+### Stage 0 — Pre-tag audits & finalization scrub (BLOCKING)
 
-Read these files if present and record what is missing or default-templated:
+Run three audits, then the 0d finalization decision. Every hit surfaces exact `file:line:matched-text`. A hit either scrubs (finished product) or is kept with a warning (draft) — see 0d.
 
-- `README.md` — flag if missing, if smaller than 1 KB, or if the install section contains the phrases `cp -r`, `Copy-Item`, `manually copy`, or `mkdir -p ~/.claude/skills`.
-- `LICENSE` — flag if missing, or if author line still says `[Year]` / `[fullname]` / `Your Name`.
-- `CHANGELOG.md` — flag if missing or empty.
-- `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`, `SECURITY.md` — flag each if missing.
-- `.github/ISSUE_TEMPLATE/bug_report.md`, `.github/ISSUE_TEMPLATE/feature_request.md`, `.github/PULL_REQUEST_TEMPLATE.md` — flag each if missing.
-- `.claude-plugin/marketplace.json` — flag if missing AND a `SKILL.md` exists at repo root (indicates Claude Code skill).
-- `package.json` — flag if author field is `""`, `"Your Name"`, or missing; flag if `files` array is missing template directories.
+**0a. Name audit** — uses `.namecheck.txt` at repo root (case-insensitive extended regex, one pattern per line):
+
+```bash
+git grep -iEf .namecheck.txt -- ':!.namecheck.txt'
+```
+
+```powershell
+git grep -iEf .namecheck.txt -- ':!.namecheck.txt'
+```
+
+The `':!.namecheck.txt'` exclusion is required so the pattern file does not match itself. If `.namecheck.txt` is missing, TrueShip creates one with default placeholder patterns (`[fullname]`, `[year]`, `your name`, `john doe`, `jane doe`).
+
+**0b. Absolute-path audit** — grep tracked files for OS-style absolute paths:
+
+```bash
+git grep -nE '^[A-Z]:\\|/Users/|/home/' -- ':!LICENSE' ':!.git*'
+```
+
+Whitelist: `LICENSE`. Any other match is a 0d hit.
+
+**0c. Identity audit** — grep for maintainer-specific tokens outside the whitelist:
+
+```bash
+git grep -nE 'ojesusmp@gmail\.com|<your-internal-id>' -- ':!LICENSE' ':!CODE_OF_CONDUCT.md' ':!SECURITY.md'
+```
+
+Whitelist: `LICENSE` author line, `CODE_OF_CONDUCT.md` enforcement contact, `SECURITY.md` security contact.
+
+**0d. Finalization decision.**
+
+If 0a–0c return ZERO hits: proceed to Stage 1, ask nothing.
+
+If any audit hit, ask ONE question:
+
+> This repo has `<N>` personal/local references (names, paths, identity tokens). Is this product **finished** and ready for public download?
+
+- **Not finished (draft):** keep everything. Print the hits as an advisory list (`file:line:matched-text`) so the maintainer knows what is there, then proceed to Stage 1. Drafts may legitimately carry local paths and personal notes — a downloader is not expected yet.
+- **Finished:** scrub. Ask one follow-up — *keep your email in the LICENSE author line, SECURITY contact, and CoC enforcement contact?* (yes/no). Then build a scrub plan.
+
+**Scrub plan.** For every hit, propose a replacement:
+
+| Hit type | Replacement |
+|---|---|
+| Absolute path in a doc / markdown file | generic form — `~/.claude/skills/<name>`, `<repo-root>`, or the relative path |
+| Absolute path in code | portable equivalent — `path.join(os.homedir(), ...)`; if the rewrite is non-trivial, flag the line instead of guessing |
+| Credit name (the `--credit-name`) outside `LICENSE` / `package.json` author / `marketplace.json` author | generic descriptor — "the operator", "the maintainer" |
+| Third-party personal name | generic descriptor |
+| Physical address | removed |
+| Email — "keep email" = no | removed everywhere |
+| Email — "keep email" = yes | kept ONLY in `LICENSE` author, SECURITY contact, CoC contact; removed elsewhere |
+| Tool / AI-assistant name, session ID, ticket ID, chat-history reference | removed |
+| Copyrighted third-party text | cannot auto-rewrite — flag the line; maintainer rewrites or removes it |
+
+**Always kept:** the credit (`LICENSE` author, `package.json` author/contributors, `marketplace.json` author) and — if the maintainer answered yes — the email in the three whitelisted contact slots. Credits are intended attribution, not a leak.
+
+Show the full plan as a `file:line:matched-text → replacement` list. Ask for ONE confirmation. On confirm, apply every replacement so the downloader gets no errors and nothing tied to the maintainer's machine or person, then **re-run 0a–0c**. Any remaining hit (e.g. a flagged copyrighted line) BLOCKS the commit until the maintainer resolves it.
+
+If the maintainer declines the scrub confirmation: stop. Do not commit, do not auto-edit.
+
+### Stage 1 — Audit standard docs
+
+Flag missing or default-templated:
+
+- `README.md` — missing, smaller than 1 KB, OR install section contains `cp -r`/`Copy-Item`/`manually copy`/`mkdir -p ~/.claude/skills` OUTSIDE the documented git-clone path (paths 1 and 3 must have zero manual-copy commands; path 2 must have it).
+- `LICENSE` — missing or contains `[Year]`/`[fullname]`/`Your Name`.
+- `CHANGELOG.md` — missing or empty.
+- `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`, `SECURITY.md` — missing.
+- `.github/ISSUE_TEMPLATE/bug_report.md`, `.github/ISSUE_TEMPLATE/feature_request.md`, `.github/PULL_REQUEST_TEMPLATE.md` — missing.
+- `.claude-plugin/marketplace.json` — missing AND a `SKILL.md` exists at repo root.
+- `package.json` — `author` is `""`/`"Your Name"`/missing; `files` array missing template dirs.
+- `.namecheck.txt` — missing (auto-create with defaults).
+- `.gitignore` — missing or lacks release-prep temp patterns (see Stage 9).
+
+### Stage 1.5 — Installer-location & convention check (BLOCKING)
+
+If the repo contains a postinstall script (`install.cjs`, `install.js`, `install.mjs`):
+
+| Check | Required | Why |
+|---|---|---|
+| Location | repo root (NOT `bin/`) | Lessons §2.2 — nested paths increase npm install-pipeline failure surface. |
+| Extension | `.cjs` (CommonJS) | Lessons §2.3 — `.mjs` postinstall misreports on some platforms. |
+| `package.json` `postinstall` | bare filename: `node install.cjs` | No subdirectory. |
+| `package.json` `type` | NOT `"module"` if installer is CJS | Avoids module-system mismatch. |
+| `package.json` `bin` field | absent (unless explicitly requested) | Lessons §2.4 — bin wrapper overlaps postinstall lifecycle on Windows. |
+| Deploy target | `path.join(os.homedir(), '.claude', 'skills', '<name>')` | Cross-OS. |
+| `.git` guard | present, `--force` bypass | Lessons §2.19 — protects dev checkouts. |
+| Post-copy SHA-256 | present, exit non-zero on mismatch | Lessons §2.20 — catches AV/partial-copy. |
+
+Any failure: surface `file:line` and exact remediation. Do not auto-fix without confirmation.
 
 ### Stage 2 — Patch docs
 
-For every flagged missing file, copy the template from `templates/<file>` (relative to TrueShip's installed location) into the target repo. Substitute these tokens during the copy:
+For each missing file, copy `templates/<file>` (relative to TrueShip install root). Token substitutions:
 
 | Token | Value |
 |---|---|
-| `{{REPO_NAME}}` | `basename` of the working directory |
-| `{{REPO_SLUG}}` | repo name lowercased + non-alphanumerics replaced with `-` |
+| `{{REPO_NAME}}` | `basename` of working dir |
+| `{{REPO_SLUG}}` | name lowercased, non-alphanumerics → `-` |
 | `{{OWNER}}` | github owner from `git remote get-url origin` (fallback `ojesusmp`) |
-| `{{CREDIT_NAME}}` | `--credit-name` value (default `Orlando Molina`) |
-| `{{CREDIT_BRAND}}` | `--credit-brand` value (default `TruePointAgents`) |
+| `{{CREDIT_NAME}}` | `--credit-name` (default `Orlando Molina`) |
+| `{{CREDIT_BRAND}}` | `--credit-brand` (default `TruePointAgents`) |
 | `{{CREDIT_EMAIL}}` | `git config user.email` |
 | `{{YEAR}}` | current year |
-| `{{DATE}}` | current date in `YYYY-MM-DD` format |
-| `{{VERSION}}` | target version (computed in Stage 6) |
-| `{{NPM_NAME}}` | `name` field from `package.json` if present |
+| `{{DATE}}` | `YYYY-MM-DD` |
+| `{{VERSION}}` | target version (Stage 6) |
+| `{{NPM_NAME}}` | `package.json` `name` |
 
-If a target file already exists, TrueShip preserves the existing file and only patches specific lines (e.g. credit substitution in `LICENSE`) — it does NOT overwrite hand-written content.
+Existing files are preserved. TrueShip only patches specific lines (e.g. credit substitution in `LICENSE`); it does NOT overwrite hand-written content.
+
+**Seed-only templates (not token-substituted, copied as-is if missing):**
+
+- `templates/.namecheck.txt` → `<repo-root>/.namecheck.txt` (canonical placeholder patterns for Stage 0a).
+- `templates/.gitignore` → merged into `<repo-root>/.gitignore` (Stage 9 patches missing lines; never removes existing entries).
 
 ### Stage 3 — Scrub credits
 
-`LICENSE` — replace any `[Year]` / `[fullname]` / `Your Name` / `John Doe` / `Jane Doe` placeholders with `{{YEAR}} {{CREDIT_NAME}} ({{CREDIT_BRAND}})`.
+`LICENSE` — replace `[Year]`/`[fullname]`/`Your Name`/`John Doe`/`Jane Doe` placeholders with `{{YEAR}} {{CREDIT_NAME}} ({{CREDIT_BRAND}})`.
 
-`package.json` — if `author` is missing or templated, set:
+`package.json` — if `author` is missing/templated:
 
 ```json
 {
-  "author": {
-    "name": "{{CREDIT_NAME}}",
-    "url": "https://github.com/{{OWNER}}"
-  },
-  "contributors": [
-    { "name": "{{CREDIT_BRAND}}", "url": "https://github.com/{{OWNER}}" }
-  ]
+  "author": { "name": "{{CREDIT_NAME}}", "url": "https://github.com/{{OWNER}}" },
+  "contributors": [ { "name": "{{CREDIT_BRAND}}", "url": "https://github.com/{{OWNER}}" } ]
 }
 ```
 
 ### Stage 4 — Simplify install
 
-Locate the README install section (heading `## Install` or `## Installation`). Replace the section body with the three-path block from `templates/install-section.md`:
+Locate the README install section (`## Install`/`## Installation`). Replace body with `templates/install-section.md`. See Stage 4.5 for shape enforcement.
 
-1. **npm** — `npm install -g <pkg-name>`
-2. **Git** — `npm install -g github:<owner>/<repo>` (pulls latest `main`)
-3. **Claude Code marketplace** — `/plugin marketplace add <owner>/<repo>` then `/plugin install <skill-name>@<marketplace>`
+### Stage 4.5 — README install-section enforcement (BLOCKING)
 
-Remove any blocks that begin with `cp -r`, `Copy-Item`, `mkdir -p ~/.claude/skills`, or any "manual install" subsection.
+The README install section must contain EXACTLY three numbered paths, in this order:
 
-### Stage 5 — Resolve version
+1. **Claude Code plugin marketplace** — auto-install. ZERO `cp`/`Copy-Item`/`mkdir` commands in body.
+2. **Git clone** — manual. Must include the copy step explicitly labeled *"Git does not run install scripts — this step is manual."*
+3. **npm** — postinstall auto-copies. ZERO manual-copy commands in body.
 
-Determine the target version with this priority:
+Each path must end with a `**Verify:**` block. Path 3 must include the documented Windows quirk note (Stage 7).
+
+If the install section deviates, BLOCK and surface diff.
+
+### Stage 5 — Resolve version & release-type
+
+Priority:
 
 1. `--version` flag.
-2. `package.json` `version` field if it does not match the latest git tag (means user already bumped it locally).
-3. Otherwise bump patch on the latest git tag: `git describe --tags --abbrev=0` then increment.
+2. `package.json` `version` if it does not match latest git tag.
+3. Else bump patch on `git describe --tags --abbrev=0`.
 
-Update `package.json` `version` if it does not already match. Append a `## [<version>] - <YYYY-MM-DD>` entry to `CHANGELOG.md` summarizing the changed and new files.
+Classify the release (`--release-type` or infer):
+
+- **code** → bump `package.json` + `marketplace.json` + tag.
+- **docs** → keep `package.json`; optionally bump `marketplace.json`; bump tag + CHANGELOG.
+- **metadata** → bump only the affected metadata file + tag.
+
+CHANGELOG wording rule: a `### Fixed` heading is only allowed when an end-to-end test confirms the symptom is gone. For symptom-relief-only changes use `### Changed` and describe the action as an *attempt*. TrueShip rewrites any `### Fixed` entry to `### Changed` if the corresponding test evidence is not present in the conversation or `.omc/state/`.
+
+### Stage 5.5 — Message-passing discipline (BLOCKING)
+
+Multi-line commit messages and release notes are NEVER inlined as CLI arguments. Always:
+
+1. Write the message to a temp file (`.commit-msg-<version>.tmp` or `.release-notes-<version>.tmp.md`).
+2. Pass via `-F <file>` (git) or `--notes-file <file>` (gh).
+3. Delete the temp file after success.
+
+Refuse the inline form even for short messages — the discipline matters more than the convenience. Temp file patterns are pre-listed in `.gitignore` (Stage 9).
 
 ### Stage 6 — Commit, tag, push
 
-Stage every modified or new file in the repo root and tracked subdirs. Skip secrets-like patterns automatically: `.env`, `.env.*`, `*credentials*`, `*secret*`.
+Stage every modified or new file in the repo root and tracked subdirs. Skip secrets-like patterns: `.env`, `.env.*`, `*credentials*`, `*secret*`.
 
-Commit message format (Conventional Commits):
+Commit message format (Conventional Commits) — written to `.commit-msg-<version>.tmp`:
 
 ```
 release: v<version> - <short summary>
 
 <bullet list of files changed and what they cover>
-- README install reduced to 3 paths: npm, git, Claude marketplace
+- README install: 3 paths each with Verify
 - Added <list of new standard docs>
 - Author attribution: <name> / <brand>
 - No functional change to <skill name> if applicable
 ```
 
-Create annotated tag:
+Then:
 
 ```bash
-git tag -a v<version> -m "<repo-name> v<version> - <summary>"
-```
-
-Push tag (this almost always works because tags do not modify branch refs):
-
-```bash
+git commit -F .commit-msg-<version>.tmp
+git tag -a v<version> -F .commit-msg-<version>.tmp
 git push origin v<version>
-```
-
-Push main:
-
-```bash
 git push origin main
+rm -f .commit-msg-<version>.tmp
 ```
 
-**TRAP — auto-mode classifier:** The Claude Code auto-mode classifier may refuse a direct push to a default branch even when the user has authorized it in conversation. When this happens, the bash tool returns an error that includes the phrase `Permission for this action was denied by the Claude Code auto mode classifier`. TrueShip detects that exact substring and surfaces this user-runnable workaround instead of retrying:
+PowerShell equivalent uses the same `-F` form — never an inline `-m "$msg"` here-string (lessons §2.8).
+
+**TRAP — auto-mode classifier:** Bash error containing `Permission for this action was denied by the Claude Code auto mode classifier` triggers this surface (no silent retry):
 
 ```
 The auto-mode classifier blocked pushing to main. Run this yourself in the prompt:
@@ -165,65 +245,131 @@ The auto-mode classifier blocked pushing to main. Run this yourself in the promp
 ! git push origin <branch>
 ```
 
-The `!` prefix runs the command in the current session so its output stays visible to both you and the assistant.
+### Stage 7 — Windows npm install warning (CONDITIONAL)
 
-### Stage 7 — npm publish + verify
+If `package.json` defines a `postinstall` script AND the README documents a `github:` npm install, the README install section's npm path MUST contain a documented note:
 
-If `package.json` exists and `--no-publish` was not passed:
+> Windows + Node 24 + npm 11 may print `MODULE_NOT_FOUND` and exit 1 even though the postinstall copy succeeded. Verify with the printed SHA-256 or use `npm pack` + local tarball for a clean exit.
 
-1. Run `npm publish` from the package root.
-2. If npm exits with code `EOTP` (one-time password required), surface this to the user:
+If the note is missing, TrueShip injects it. This is cosmetic upstream behaviour, not a bug to fix — lessons §2.1.
+
+### Stage 8 — Privacy hygiene (BLOCKING REVIEW)
+
+User-facing tracked files (`README.md`, `SKILL.md`, `CHANGELOG.md`, `EXAMPLES.md`, `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, `package.json`, `marketplace.json`, `.github/**`) must NOT contain:
+
+- Personal names of third parties (use generic descriptors).
+- Absolute filesystem paths.
+- Maintainer's filesystem layout (drive letters, project folders).
+- Names of tools, agents, or AI assistants used to author the skill.
+- Internal session IDs, ticket IDs, chat-history references.
+- Email addresses outside the LICENSE author line, CoC enforcement contact, and SECURITY contact.
+
+This stage cross-references Stage 0 audits and re-runs them after Stage 2 patches (because token substitution can re-introduce leaks). If Stage 0d classified the repo as a draft, this re-run is advisory only — it warns but does not block.
+
+### Stage 9 — `.gitignore` minimums
+
+The `.gitignore` must include (TrueShip adds any missing lines, never removes existing entries):
 
 ```
-npm requires a one-time password. Open this URL in your browser to authenticate:
+# Release-prep scratch files
+.commit-msg-*.tmp
+.release-notes-*.tmp.md
 
-  <URL from npm error output>
+# Local harness / state
+.omc/
+.journal/
+.claude/
 
-After authenticating, re-run: ! npm publish
+# Operator feedback
+.usage.log
+
+# Secrets — defense in depth
+.env
+.env.*
+*credentials*
+*secret*
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Logs
+*.log
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
 ```
 
-3. After a successful publish, verify with `npm view <pkg> version` and confirm it matches the target version.
+### Stage 10 — Final verification
 
-**Verification block (always runs):**
+Run AFTER commit + tag + push:
 
 ```bash
 # Remote tag landed?
 git ls-remote --tags origin v<version>
 
-# GitHub release exists (if gh is on PATH)?
-gh release view v<version> 2>/dev/null
+# GitHub release exists?
+gh release view v<version>
 
-# npm version matches?
-npm view <pkg> version 2>/dev/null
+# npm version matches (publish-eligible only)?
+npm view <pkg> version
 ```
 
-Report each check's PASS or FAIL to the user. If any check fails, list the manual fix command.
+For npm-publish path, before publish: optionally `npm pack` and dry-install locally to confirm the tarball deploys cleanly. After publish, fetch the deployed `SKILL.md` SHA-256 and compare to the source SHA — they must match.
+
+Each check reports PASS / FAIL with exact remediation command. CRLF warnings during `git add` are suppressed in the report (harmless `core.autocrlf`).
+
+---
+
+## Anti-patterns (TrueShip REFUSES to ship if detected)
+
+1. **Inlining multi-line text as a CLI argument** to `git`/`gh`. Always `-F`/`--notes-file`.
+2. **Personal-name attributions** in user-facing docs (even in "Credits" sections) — for a finished product; scrubbed or kept per the Stage 0d finalization decision.
+3. **Absolute paths** in tracked files outside whitelist — for a finished product; scrubbed or kept per the Stage 0d finalization decision.
+4. **`### Fixed` claims without an end-to-end test confirming the symptom is gone.** Use `### Changed` (attempt) instead.
+5. **Postinstall scripts at non-root paths** when the repo will be `npm install -g github:` installed.
+6. **ESM (`.mjs`) postinstall scripts.** Use `.cjs`.
+7. **`bin` field** for the installer unless the maintainer explicitly requests it with documented rationale.
+8. **Sequential failed re-attempts at the same fix.** After 2 attempts targeting the same root cause, accept the cause is upstream and document the quirk.
+9. **README install sections with more than 3 numbered paths.** Three is the cognitive ceiling.
+10. **Marketplace install instructions without shipping `.claude-plugin/marketplace.json`.**
 
 ## Known traps and workarounds (handled automatically)
 
 | Trap | Workaround |
 |---|---|
-| Auto-mode classifier blocks `git push origin main` | Surface `! git push origin main` to the user; never retry silently. |
-| npm OTP required | Read the auth URL out of the error output; instruct the user to open it; instruct them to re-run `! npm publish`. |
-| Content filter blocks long inline assistant prose | Always write file contents via the Write tool, never inline as a multi-paragraph assistant message. |
-| Windows CRLF warnings on `git add` | Suppress in reporting; they are harmless `core.autocrlf` warnings. |
-| Postinstall recursion in source repo | The shipped `bin/install.mjs` already exits early when `.git/` is present in the package root. |
-| `git push origin <tag>` before the commit hits remote | Push the commit first (or push tag separately); if the commit is unreachable, the tag will reference an orphan object until pushed. |
-| `gh repo create` requires auth | If `gh auth status` fails, instruct the user to run `! gh auth login`. |
+| Auto-mode classifier blocks `git push origin main` | Surface `! git push origin main`; never retry silently. |
+| npm OTP required | Read auth URL from error; instruct user to open it; re-run via `! npm publish`. |
+| Content filter blocks long inline assistant prose | Always Write to file; never inline multi-paragraph assistant messages. |
+| Windows CRLF warnings | Suppressed; harmless. |
+| Windows + Node 24 + npm 11 `MODULE_NOT_FOUND` exit-1 | Document; verify SHA; recommend `npm pack` + local tarball. |
+| Postinstall recursion in source repo | `.git/` guard in `install.cjs`; `--force` bypass. |
+| `gh release` glob-trap on inline `--notes` | Use `--notes-file`. |
+| PowerShell here-string mangling argv to `git`/`gh` | Use `-F` / `--notes-file`. |
+| Tag pushed before commit hits remote | Push commit first; or push tag separately after commit lands. |
+| `gh repo create` requires auth | Instruct `! gh auth login`. |
 
 ## Validation checklist
 
-Before TrueShip reports success, every item must be confirmed in the assistant message:
+Before TrueShip reports success, every box must be ticked in the assistant message:
 
-- [ ] All flagged-missing standard docs now exist at the expected paths.
-- [ ] `LICENSE` no longer contains `[Year]` / `[fullname]` / `Your Name`.
+- [ ] Stage 0 audits returned zero hits — OR the repo was classified a draft (0d) and the advisory hit list was shown — OR the finalization scrub was applied and 0a–0c re-ran clean.
+- [ ] Stage 1.5 installer-convention checks all passed (root location, `.cjs`, no `bin`, `.git` guard, SHA verify).
+- [ ] All flagged-missing standard docs now exist at expected paths.
+- [ ] `LICENSE` no longer contains `[Year]`/`[fullname]`/`Your Name`.
 - [ ] `package.json` `author.name` equals `{{CREDIT_NAME}}`.
-- [ ] README install section contains exactly the three install paths and no manual copy block.
-- [ ] `git status` reports a clean working tree after commit.
-- [ ] Tag `v<version>` exists locally (`git tag -l v<version>` is non-empty).
-- [ ] Tag pushed to origin (`git ls-remote --tags origin v<version>` is non-empty).
-- [ ] If publish-eligible: `npm view <pkg> version` equals target version.
-- [ ] If `main` push was blocked: the `!` workaround was surfaced to the user.
+- [ ] README install section: exactly 3 paths, each with a `**Verify:**` block; paths 1 & 3 contain ZERO manual-copy commands; path 3 contains the Windows-quirk note.
+- [ ] CHANGELOG `### Fixed` entries are backed by an end-to-end test, else rewritten to `### Changed`.
+- [ ] Commit + tag created via `-F .commit-msg-<version>.tmp`; temp file deleted after.
+- [ ] `git status` clean post-commit.
+- [ ] `git ls-remote --tags origin v<version>` non-empty.
+- [ ] If publish-eligible: `npm view <pkg> version` equals target version AND deployed SKILL.md SHA-256 matches source.
+- [ ] If `main` push was blocked: the `!` workaround was surfaced.
 
 ## Examples
 
@@ -233,23 +379,17 @@ Before TrueShip reports success, every item must be confirmed in the assistant m
 trueship --version 1.0.0
 ```
 
-Audits a fresh skill folder, writes every standard doc, scrubs credits, commits, tags `v1.0.0`, pushes tag, attempts to push `main` (or surfaces the workaround), publishes to npm.
-
-### Patch release of an existing skill
+### Patch release
 
 ```
 trueship
 ```
 
-Bumps patch version (read from `git describe`), appends a `CHANGELOG.md` entry summarizing changed files, commits, tags, pushes, publishes.
-
 ### Docs-only run, no publish
 
 ```
-trueship --no-publish
+trueship --release-type docs --no-publish
 ```
-
-Patches docs and commits but skips npm publish. Useful for repos that are not on npm yet.
 
 ### Override credits
 
@@ -257,24 +397,22 @@ Patches docs and commits but skips npm publish. Useful for repos that are not on
 trueship --credit-name "Jane Smith" --credit-brand "Smith Labs"
 ```
 
-Uses the supplied credit values instead of the defaults.
-
 ## Customization
 
-Edit any file under `templates/` to change the default content that TrueShip writes into target repos. Token substitution rules live in Stage 2 above.
+Edit any file under `templates/` to change the default content TrueShip writes. Token rules: Stage 2. Disallowed names: edit `.namecheck.txt`.
 
 To add a new standard doc:
 
-1. Drop the new template at `templates/<filename>`.
-2. Add a row to the Stage 1 audit list above describing when the doc is considered missing.
-3. Add a row to the Stage 2 substitution table if the template uses any new tokens.
+1. Drop the template at `templates/<filename>`.
+2. Add a row to Stage 1.
+3. Add any new tokens to Stage 2.
 
 ## Limitations
 
-- Does not create the GitHub repo itself if it does not yet exist; use `gh repo create <owner>/<name> --public --source=. --remote=origin` first.
-- Does not handle monorepos with multiple packages — runs against the repo root only.
-- Does not run tests before publish; rely on `prepublishOnly` in `package.json` if you want a test gate.
-- Does not handle pre-1.0 unstable versions specially; treat the user's `--version` flag as authoritative.
+- Does not create the GitHub repo; use `gh repo create <owner>/<name> --public --source=. --remote=origin` first.
+- Does not handle monorepos with multiple packages — repo root only.
+- Does not run tests before publish; rely on `prepublishOnly` in `package.json`.
+- Does not handle pre-1.0 unstable versions specially; treat `--version` as authoritative.
 
 ## License
 
